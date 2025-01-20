@@ -34,7 +34,6 @@ void absVector(float *values, float *output, int N)
 	//  Why is that the case?
 	for (int i = 0; i < N; i += VECTOR_WIDTH)
 	{
-
 		// All ones
 		maskAll = _cmu418_init_ones();
 
@@ -95,6 +94,79 @@ void clampedExpVector(float *values, int *exponents, float *output, int N)
 {
 	// Implement your vectorized version of clampedExpSerial here
 	//  ...
+	__cmu418_vec_float x;
+	__cmu418_vec_int y, one = _cmu418_vset_int(1), zero = _cmu418_vset_int(0);
+	__cmu418_vec_float result;
+	__cmu418_vec_float upper_limit = _cmu418_vset_float(4.18f);
+	__cmu418_mask mask = _cmu418_init_ones(), run, mask_clamp;
+
+	auto compute_exp_vec = [&](__cmu418_mask &mask, int start)
+	{
+		// reset
+		result = _cmu418_vset_float(1.f);
+
+		// Load x and y
+		_cmu418_vload_float(x, values + start, mask);
+		_cmu418_vload_int(y, exponents + start, mask);
+
+		// printf("x0, y0: %f, %d\n", x.value[0], y.value[0]);
+
+		__cmu418_vec_float xpower;
+		_cmu418_vmove_float(xpower, x, mask);
+
+		_cmu418_vgt_int(run, y, zero, mask);
+
+		while (_cmu418_cntbits(run))
+		{
+			// y & 0x1
+			__cmu418_vec_int run_mul;
+			_cmu418_vbitand_int(run_mul, y, one, mask);
+
+			__cmu418_mask y_mask;
+			_cmu418_veq_int(y_mask, run_mul, one, mask);
+
+			// result *= xpower;
+			_cmu418_vmult_float(result, result, xpower, y_mask);
+
+			// xpower = xpower * xpower;
+			_cmu418_vmult_float(xpower, xpower, xpower, mask);
+
+			// y >>= 1
+			_cmu418_vshiftright_int(y, y, one, mask);
+
+			// update run
+			_cmu418_vgt_int(run, y, zero, mask);
+		}
+
+		_cmu418_vgt_float(mask_clamp, result, upper_limit, mask);
+		_cmu418_vmove_float(result, upper_limit, mask_clamp);
+
+		// output[i] = result;
+		_cmu418_vstore_float(output + start, result, mask);
+	};
+
+	if (N % VECTOR_WIDTH != 0)
+	{
+		for (int i = 0; i < N - VECTOR_WIDTH; i += VECTOR_WIDTH)
+		{
+			compute_exp_vec(mask, i);
+		}
+
+		for (int i = N - VECTOR_WIDTH; i < N; i += VECTOR_WIDTH)
+		{
+			mask = _cmu418_init_ones(N % VECTOR_WIDTH);
+			mask = _cmu418_mask_not(mask); // important!!
+			// printf("mask cnt 1: %d\n", _cmu418_cntbits(mask));
+			compute_exp_vec(mask, i);
+		}
+	}
+	else
+	{
+		for (int i = 0; i < N; i += VECTOR_WIDTH)
+		{
+			compute_exp_vec(mask, i);
+		}
+	}
 }
 
 float arraySumSerial(float *values, int N)
