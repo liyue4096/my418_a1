@@ -30,9 +30,9 @@ int main()
 
     float scale = 2.f;
 
-    float *arrayX = new float[N];
-    float *arrayY = new float[N];
-    float *result = new float[N];
+    float *arrayX = (float *)aligned_alloc(32, N * sizeof(float)); // new float[N];
+    float *arrayY = (float *)aligned_alloc(32, N * sizeof(float)); // new float[N];
+    float *result = (float *)aligned_alloc(32, N * sizeof(float)); // new float[N];
 
     // initialize array values
     for (unsigned int i = 0; i < N; i++)
